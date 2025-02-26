@@ -1,11 +1,5 @@
-### This is the TPS Robotics Github Repo
-All motors function as follows
-[Motor/Sensor] x --> Function
-...
-[Motor/Sensor] n --> Function
-
-### Usage 
-To use a [motor/sensor] --> y
-
-### Ensure to post all issues in the issues pannel 
-THis will allow us to code quicker and work as a team
+2 Motors >> 1 on each side {"A": Left, "B", Right}
+1 color sensor >> front looking down >>> F
+1 color sensor >> C >> underneath the robot
+1 motion sensor >> E >> front of robot
+Goal: Maze solver with white as the path and black as the boundaries we cannot touch
