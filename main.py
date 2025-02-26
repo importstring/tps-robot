@@ -1,9 +1,9 @@
 import motor
 import color_sensor
 import runloop
-from hub import port, device
+from hub import port
 import motor_pair
-import color
+import device
 
 # Navigation states
 LINE_FOLLOWING = 1
@@ -14,7 +14,7 @@ ERROR_RECOVERY = 3
 Kp = 0.8
 Ki = 0.1
 Kd = 0.2
-SETPOINT = 85  # Adjusted for white line detection [1]
+SETPOINT = 85  # Adjusted for white line detection
 BASE_SPEED = 360  # deg/sec for large motors (max 1050)
 MAX_STEERING = 100  # PID output limit
 
@@ -35,7 +35,7 @@ class PIDController:
 pid = PIDController()
 
 async def navigate():
-    # Validate hardware configuration [2]
+    # Validate hardware configuration
     if device.id(port.C) != 61 or device.id(port.F) != 61:
         raise Exception("Color sensors required on ports C and F")
     if device.id(port.A) not in [48,49] or device.id(port.B) not in [48,49]:
@@ -50,28 +50,28 @@ async def navigate():
 
         if state == LINE_FOLLOWING:
             steering = pid.compute_steering(bottom_reflection)
-            steering_scaled = steering * 3.6  # Scale to ±360 deg/s [3]
-            
-            # Calculate and clamp motor speeds [4]
+            steering_scaled = steering * 3.6  # Scale to ±360 deg/s
+
+            # Calculate and clamp motor speeds
             left_speed = max(-1050, min(BASE_SPEED - steering_scaled, 1050))
             right_speed = max(-1050, min(BASE_SPEED + steering_scaled, 1050))
-            
+
+            # Fixed: removed deceleration parameter which is not supported in move_tank
             motor_pair.move_tank(
                 motor_pair.PAIR_1,
                 int(left_speed),
                 int(right_speed),
-                acceleration=800,
-                deceleration=800
+                acceleration=800
             )
 
-            # State transitions [5]
+            # State transitions
             if front_reflection < 20:  # Black boundary
                 state = ERROR_RECOVERY
             elif front_reflection > 80:  # White intersection
                 state = INTERSECTION_DETECTION
 
         elif state == INTERSECTION_DETECTION:
-            # 90° turn using degrees calculation [6]
+            # 90° turn using degrees calculation
             await motor_pair.move_for_degrees(
                 motor_pair.PAIR_1,
                 180,  # 180° rotation for differential drive
@@ -83,7 +83,7 @@ async def navigate():
             state = LINE_FOLLOWING
 
         elif state == ERROR_RECOVERY:
-            # Physics-based recovery [7]
+            # Physics-based recovery
             await motor_pair.move_tank_for_time(
                 motor_pair.PAIR_1,
                 -360, -360,  # Reverse both motors
@@ -95,7 +95,8 @@ async def navigate():
                 90,  # 45° search pattern
                 steering=100,
                 velocity=360,
-                acceleration=1000
+                acceleration=1000,
+                deceleration=1000  # Added proper deceleration parameter
             )
             state = LINE_FOLLOWING
 
