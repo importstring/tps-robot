@@ -63,23 +63,23 @@ class MazeSolver:
 
                 # Wall detection and path correction logic
                 if color_sensor.color(port.C) is not color.BLACK:
-                    for i in range(10):
+                    for i in range(1000):
+                        if color_sensor.color(port.C) is not color.BLACK:
+                            motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
+                            motor_pair.move_for_time(motor_pair.PAIR_3, 1, 0)
+                            motor.run(port.B, 50000)
+                            break
+                        motor.run(port.A, 10000)
+                elif color_sensor.color(port.F) is not color.BLACK:
+                    for i in range(50):
                         if color_sensor.color(port.C) is not color.BLACK:
                             motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
                             motor_pair.move_for_time(motor_pair.PAIR_3, 100, 0)
-                            motor.run(port.B, 5000000)
-                            break
-                        motor.run(port.A, 1000000)
-                elif color_sensor.color(port.F) is not color.BLACK:
-                    for i in range(5):
-                        if color_sensor.color(port.C) is not color.BLACK:
-                            motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
-                            motor_pair.move_for_time(motor_pair.PAIR_3, 1000, 0)
-                            motor.run(port.A, 10000000)
+                            motor.run(port.A, 1000000)
                             break
                         motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
-                        motor_pair.move_for_time(motor_pair.PAIR_3, 200, 0)
-                        motor.run(port.B, 100000)
+                        motor_pair.move_for_time(motor_pair.PAIR_3, 20, 0)
+                        motor.run(port.B, 10000)
                 else:
                     if front_val == 0 and center_val == 0:
                         motor_pair.move(MOTOR_PAIR, 0, velocity=0)# Stop the robot
