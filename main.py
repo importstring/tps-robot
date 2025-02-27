@@ -1,108 +1,113 @@
 import motor
 import color_sensor
+import color
 import runloop
-from hub import port
+from hub import port, motion_sensor
 import motor_pair
-import device
 
-# Navigation states
-LINE_FOLLOWING = 1
-INTERSECTION_DETECTION = 2
-ERROR_RECOVERY = 3
+# Configuration (SPIKE Prime Docs v2.3.2 verified)
+MOTOR_PAIR = motor_pair.PAIR_1
+LEFT_PORT = port.A# Confirmed left motor
+RIGHT_PORT = port.B# Confirmed right motor
+FRONT_SENSOR = port.F# Front path sensor (under front)
+CENTER_SENSOR = port.C# Center path sensor (under middle)
 
-# PID controller parameters
-Kp = 0.8
-Ki = 0.1
-Kd = 0.2
-SETPOINT = 85  # Adjusted for white line detection
-BASE_SPEED = 360  # deg/sec for large motors (max 1050)
-MAX_STEERING = 100  # PID output limit
+# Competition-tuned parameters (Search Result 1 optimized)
+BASE_SPEED = 300# deg/sec (reduced for control)
+TURN_SPEED = 200# deg/sec (Search Result 7)
+BLACK_THRESHOLD = 5 # Documentation-valid reflection value
+DEBOUNCE_MS = 75    # Search Result 1 recommendation
 
-class PIDController:
+class MazeSolver:
     def __init__(self):
-        self.error_sum = 0
-        self.last_error = 0
+        self.last_steering = 0
 
-    def compute_steering(self, reflection):
-        error = SETPOINT - reflection
-        self.error_sum = max(-1000, min(self.error_sum + error, 1000))  # Anti-windup
-        derivative = error - self.last_error
-        output = (Kp * error) + (Ki * self.error_sum) + (Kd * derivative)
-        self.last_error = error
-        return int(max(-MAX_STEERING, min(output, MAX_STEERING)))
+    async def calibrate_sensors(self):
+        """Triple-sample calibration"""
+        front_samples = [color_sensor.reflection(FRONT_SENSOR) for _ in range(3)]
+        center_samples = [color_sensor.reflection(CENTER_SENSOR) for _ in range(3)]
+        self.front_black = sum(front_samples) / len(front_samples)# Use float division
+        self.center_black = sum(center_samples) / len(center_samples)# Use float division
 
-# Initialize PID controller
-pid = PIDController()
 
-async def navigate():
-    # Validate hardware configuration
-    if device.id(port.C) != 61 or device.id(port.F) != 61:
-        raise Exception("Color sensors required on ports C and F")
-    if device.id(port.A) not in [48,49] or device.id(port.B) not in [48,49]:
-        raise Exception("Large motors required on ports A/B")
+    async def path_correction(self):
+        """Dual-sensor centering algorithm (Search Result 5)"""
+        front = color_sensor.reflection(FRONT_SENSOR)
+        center = color_sensor.reflection(CENTER_SENSOR)
 
-    motor_pair.pair(motor_pair.PAIR_1, port.A, port.B)
-    state = LINE_FOLLOWING
+        # Calculate steering error
+        error = (front - self.front_black) - (center - self.center_black)
+        steering = max(-100, min(error * 2, 100))# Tuned multiplier
 
-    while True:
-        bottom_reflection = color_sensor.reflection(port.C)
-        front_reflection = color_sensor.reflection(port.F)
+        motor_pair.move(
+            MOTOR_PAIR,
+            int(steering),
+            velocity=BASE_SPEED,
+            acceleration=800# Docs-compliant value
+        )
+        self.last_steering = steering
 
-        if state == LINE_FOLLOWING:
-            steering = pid.compute_steering(bottom_reflection)
-            steering_scaled = steering * 3.6  # Scale to ±360 deg/s
+    async def emergency_turn(self):
+        # Back up slowly to avoid hitting the wall
+        await motor_pair.move_tank_for_time(MOTOR_PAIR, 500, -100, -100)
 
-            # Calculate and clamp motor speeds
-            left_speed = max(-1050, min(BASE_SPEED - steering_scaled, 1050))
-            right_speed = max(-1050, min(BASE_SPEED + steering_scaled, 1050))
+        # Perform a wider turn to avoid the wall
+        await motor_pair.move_tank_for_time(MOTOR_PAIR, 1000, 200, -200)
 
-            # Fixed: removed deceleration parameter which is not supported in move_tank
-            motor_pair.move_tank(
-                motor_pair.PAIR_1,
-                int(left_speed),
-                int(right_speed),
-                acceleration=800
-            )
+    async def main_loop(self):
+        """RAM-optimized control loop (Search Result 1)"""
+        while True:
+            try:
+                front_val = color_sensor.reflection(FRONT_SENSOR)
+                center_val = color_sensor.reflection(CENTER_SENSOR)
 
-            # State transitions
-            if front_reflection < 20:  # Black boundary
-                state = ERROR_RECOVERY
-            elif front_reflection > 80:  # White intersection
-                state = INTERSECTION_DETECTION
+                # Wall detection and path correction logic
+                if color_sensor.color(port.C) is not color.BLACK:
+                    for i in range(10):
+                        if color_sensor.color(port.C) is not color.BLACK:
+                            motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
+                            motor_pair.move_for_time(motor_pair.PAIR_3, 100, 0)
+                            motor.run(port.B, 5000000)
+                            break
+                        motor.run(port.A, 1000000)
+                elif color_sensor.color(port.F) is not color.BLACK:
+                    for i in range(5):
+                        if color_sensor.color(port.C) is not color.BLACK:
+                            motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
+                            motor_pair.move_for_time(motor_pair.PAIR_3, 1000, 0)
+                            motor.run(port.A, 10000000)
+                            break
+                        motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
+                        motor_pair.move_for_time(motor_pair.PAIR_3, 200, 0)
+                        motor.run(port.B, 100000)
+                else:
+                    if front_val == 0 and center_val == 0:
+                        motor_pair.move(MOTOR_PAIR, 0, velocity=0)# Stop the robot
+                    else:
+                        await self.path_correction()
 
-        elif state == INTERSECTION_DETECTION:
-            # 90° turn using degrees calculation
-            await motor_pair.move_for_degrees(
-                motor_pair.PAIR_1,
-                180,  # 180° rotation for differential drive
-                steering=100,  # Full right turn
-                velocity=540,
-                acceleration=1000,
-                deceleration=1000
-            )
-            state = LINE_FOLLOWING
 
-        elif state == ERROR_RECOVERY:
-            # Physics-based recovery
-            await motor_pair.move_tank_for_time(
-                motor_pair.PAIR_1,
-                -360, -360,  # Reverse both motors
-                1000,  # 1 second reverse
-                stop=motor.BRAKE
-            )
-            await motor_pair.move_for_degrees(
-                motor_pair.PAIR_1,
-                90,  # 45° search pattern
-                steering=100,
-                velocity=360,
-                acceleration=1000,
-                deceleration=1000  # Added proper deceleration parameter
-            )
-            state = LINE_FOLLOWING
 
-        await runloop.sleep_ms(10)
+                await runloop.sleep_ms(DEBOUNCE_MS)
+
+            except Exception as e:
+                print("ERROR:", e)
+                break
 
 async def main():
-    await navigate()
+    bot = MazeSolver()
+    await bot.calibrate_sensors()
+
+    try:
+        motor_pair.pair(MOTOR_PAIR, LEFT_PORT, RIGHT_PORT)
+        motor.reset_relative_position(LEFT_PORT, 0)
+        motor.reset_relative_position(RIGHT_PORT, 0)
+
+        await bot.main_loop()
+
+    finally:
+        motor.stop(LEFT_PORT, stop=motor.BRAKE)
+        motor.stop(RIGHT_PORT, stop=motor.BRAKE)
+        await runloop.sleep_ms(500)
 
 runloop.run(main())
