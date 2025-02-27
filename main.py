@@ -17,6 +17,7 @@ BASE_SPEED = 300# deg/sec (reduced for control)
 TURN_SPEED = 200# deg/sec (Search Result 7)
 BLACK_THRESHOLD = 5 # Documentation-valid reflection value
 DEBOUNCE_MS = 75    # Search Result 1 recommendation
+motor_pair.pair(motor_pair.PAIR_1, port.A, port.B)
 
 class MazeSolver:
     def __init__(self):
@@ -62,39 +63,37 @@ class MazeSolver:
 
                 if color_sensor.color(port.C) is not color.BLACK:
 
-                    for i in range(1000):
+                    motor_pair.move_for_time(motor_pair.PAIR_1, 200, 0, velocity=-30)
+
+                    for i in range(10):
 
                         if color_sensor.color(port.C) is not color.BLACK:
 
-                            motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
-
-                            motor_pair.move_for_time(motor_pair.PAIR_3, 1, 0)
-                            motor.run(port.B, 50000)
+                            while color_sensor.color(port.C) is not color.BLACK:
+                                motor.run(port.A, 1000)
 
                             break
-                        
-                        motor.run(port.A, 10000)
+
+                        motor.run(port.B, 10000)
 
                 elif color_sensor.color(port.F) is not color.BLACK:
 
-                    for i in range(50):
+                    motor_pair.move_for_time(motor_pair.PAIR_1, 200, 0, velocity=-30)
+
+                    for i in range(10):
 
                         if color_sensor.color(port.C) is not color.BLACK:
 
-                            motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
-                            
-                            motor_pair.move_for_time(motor_pair.PAIR_3, 100, 0)
-                            motor.run(port.A, 1000000)
+                            while color_sensor.color(port.C) is not color.BLACK:
+                                motor.run(port.A, 1000)
 
                             break
 
-                        motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
-
-                        motor_pair.move_for_time(motor_pair.PAIR_3, 20, 0)
                         motor.run(port.B, 10000)
+
                 else:
                     if front_val == 0 and center_val == 0:
-                        motor_pair.move_for_time(motor_pair.PAIR_3, 2000, 0)
+                        motor_pair.move_for_time(motor_pair.PAIR_1, 200, 0)
                     else:
                         await self.path_correction()
 
@@ -112,7 +111,6 @@ async def main():
     await bot.calibrate_sensors()
 
     try:
-        motor_pair.pair(MOTOR_PAIR, LEFT_PORT, RIGHT_PORT)
         motor.reset_relative_position(LEFT_PORT, 0)
         motor.reset_relative_position(RIGHT_PORT, 0)
 
