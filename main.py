@@ -55,34 +55,46 @@ class MazeSolver:
         await motor_pair.move_tank_for_time(MOTOR_PAIR, 1000, 200, -200)
 
     async def main_loop(self):
-        """RAM-optimized control loop (Search Result 1)"""
         while True:
             try:
                 front_val = color_sensor.reflection(FRONT_SENSOR)
                 center_val = color_sensor.reflection(CENTER_SENSOR)
 
-                # Wall detection and path correction logic
                 if color_sensor.color(port.C) is not color.BLACK:
+
                     for i in range(1000):
+
                         if color_sensor.color(port.C) is not color.BLACK:
+
                             motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
+
                             motor_pair.move_for_time(motor_pair.PAIR_3, 1, 0)
                             motor.run(port.B, 50000)
+
                             break
+                        
                         motor.run(port.A, 10000)
+
                 elif color_sensor.color(port.F) is not color.BLACK:
+
                     for i in range(50):
+
                         if color_sensor.color(port.C) is not color.BLACK:
+
                             motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
+                            
                             motor_pair.move_for_time(motor_pair.PAIR_3, 100, 0)
                             motor.run(port.A, 1000000)
+
                             break
+
                         motor_pair.pair(motor_pair.PAIR_3, port.A, port.B)
+
                         motor_pair.move_for_time(motor_pair.PAIR_3, 20, 0)
                         motor.run(port.B, 10000)
                 else:
                     if front_val == 0 and center_val == 0:
-                        motor_pair.move(MOTOR_PAIR, 0, velocity=0)# Stop the robot
+                        motor_pair.move_for_time(motor_pair.PAIR_3, 2000, 0)
                     else:
                         await self.path_correction()
 
@@ -91,6 +103,7 @@ class MazeSolver:
                 await runloop.sleep_ms(DEBOUNCE_MS)
 
             except Exception as e:
+
                 print("ERROR:", e)
                 break
 
